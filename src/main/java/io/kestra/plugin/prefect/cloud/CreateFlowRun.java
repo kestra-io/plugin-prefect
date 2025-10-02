@@ -3,13 +3,13 @@ package io.kestra.plugin.prefect.cloud;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.models.tasks.Task;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.JacksonMapper;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
@@ -71,35 +71,34 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         title = "Prefect Cloud API key",
         description = "API key for authenticating with Prefect Cloud. You can create an API key from your Prefect Cloud account settings."
     )
-    @PluginProperty(dynamic = true)
+    @NotNull
     private Property<String> apiKey;
 
     @Schema(
         title = "Prefect Cloud account ID",
         description = "The account ID (UUID) in Prefect Cloud."
     )
-    @PluginProperty(dynamic = true)
+    @NotNull
     private Property<String> accountId;
 
     @Schema(
         title = "Prefect Cloud workspace ID",
         description = "The workspace ID (UUID) in Prefect Cloud."
     )
-    @PluginProperty(dynamic = true)
+    @NotNull
     private Property<String> workspaceId;
 
     @Schema(
         title = "Deployment ID",
         description = "The deployment ID (UUID) to create a flow run from."
     )
-    @PluginProperty(dynamic = true)
+    @NotNull
     private Property<String> deploymentId;
 
     @Schema(
         title = "Wait for flow run completion",
         description = "Whether to wait for the flow run to complete before continuing. If true, the task will poll the flow run status until it reaches a terminal state (COMPLETED, FAILED, CANCELLED, etc.)."
     )
-    @PluginProperty
     @Builder.Default
     private Property<Boolean> wait = Property.of(true);
 
@@ -107,7 +106,6 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         title = "Poll frequency",
         description = "How often to poll the flow run status when wait is true."
     )
-    @PluginProperty
     @Builder.Default
     private Duration pollFrequency = Duration.ofSeconds(5);
 
@@ -115,14 +113,12 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         title = "Flow run parameters",
         description = "Optional parameters to pass to the flow run."
     )
-    @PluginProperty(dynamic = true)
     private Map<String, Object> parameters;
 
     @Schema(
         title = "Base URL",
         description = "Base URL for Prefect Cloud API. Defaults to https://api.prefect.cloud/api"
     )
-    @PluginProperty(dynamic = true)
     private Property<String> baseUrl;
 
     @Override
@@ -137,10 +133,10 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             .baseUrl(this.baseUrl != null ? this.baseUrl : Property.of("https://api.prefect.cloud/api"))
             .build();
 
-        String renderedDeploymentId = runContext.render(deploymentId).as(String.class).orElseThrow();
+        String rDeploymentId = runContext.render(deploymentId).as(String.class).orElseThrow();
 
         // Create flow run
-        logger.info("Creating flow run for deployment: {}", renderedDeploymentId);
+        logger.info("Creating flow run for deployment: {}", rDeploymentId);
         
         Map<String, Object> requestBody = new HashMap<>();
         if (parameters != null && !parameters.isEmpty()) {
@@ -148,7 +144,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         }
 
         HttpClient httpClient = PrefectConnection.httpClient();
-        HttpRequest request = connection.request(runContext, "/deployments/" + renderedDeploymentId + "/create_flow_run")
+        HttpRequest request = connection.request(runContext, "/deployments/" + rDeploymentId + "/create_flow_run")
             .POST(HttpRequest.BodyPublishers.ofString(OBJECT_MAPPER.writeValueAsString(requestBody)))
             .build();
 
@@ -212,11 +208,11 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     }
 
     private String getFlowRunUrl(RunContext runContext, PrefectConnection connection, String flowRunId) throws Exception {
-        String renderedAccountId = runContext.render(connection.getAccountId()).as(String.class).orElseThrow();
-        String renderedWorkspaceId = runContext.render(connection.getWorkspaceId()).as(String.class).orElseThrow();
+        String rAccountId = runContext.render(connection.getAccountId()).as(String.class).orElseThrow();
+        String rWorkspaceId = runContext.render(connection.getWorkspaceId()).as(String.class).orElseThrow();
         
         return String.format("https://app.prefect.cloud/account/%s/workspace/%s/flow-runs/flow-run/%s",
-            renderedAccountId, renderedWorkspaceId, flowRunId);
+            rAccountId, rWorkspaceId, flowRunId);
     }
 
     @Builder

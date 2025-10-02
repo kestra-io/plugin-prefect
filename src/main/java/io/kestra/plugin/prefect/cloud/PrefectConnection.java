@@ -3,12 +3,12 @@ package io.kestra.plugin.prefect.cloud;
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.util.Map;
 
 @Builder
 @Getter
@@ -20,24 +20,29 @@ public class PrefectConnection {
     @Builder.Default
     private Property<String> baseUrl = Property.of(PREFECT_CLOUD_API_BASE_URL);
     
+    @NotNull
     private Property<String> apiKey;
+    
+    @NotNull
     private Property<String> accountId;
+    
+    @NotNull
     private Property<String> workspaceId;
 
     public HttpRequest.Builder request(RunContext runContext, String path) throws IllegalVariableEvaluationException {
-        String renderedBaseUrl = runContext.render(baseUrl).as(String.class).orElseThrow();
-        String renderedApiKey = runContext.render(apiKey).as(String.class).orElseThrow();
-        String renderedAccountId = runContext.render(accountId).as(String.class).orElseThrow();
-        String renderedWorkspaceId = runContext.render(workspaceId).as(String.class).orElseThrow();
+        String rBaseUrl = runContext.render(baseUrl).as(String.class).orElseThrow();
+        String rApiKey = runContext.render(apiKey).as(String.class).orElseThrow();
+        String rAccountId = runContext.render(accountId).as(String.class).orElseThrow();
+        String rWorkspaceId = runContext.render(workspaceId).as(String.class).orElseThrow();
         
-        String url = renderedBaseUrl + 
-                    "/accounts/" + renderedAccountId + 
-                    "/workspaces/" + renderedWorkspaceId + 
+        String url = rBaseUrl + 
+                    "/accounts/" + rAccountId + 
+                    "/workspaces/" + rWorkspaceId + 
                     path;
         
         return HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .header("Authorization", "Bearer " + renderedApiKey)
+            .header("Authorization", "Bearer " + rApiKey)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json");
     }

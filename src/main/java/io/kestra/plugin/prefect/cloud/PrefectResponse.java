@@ -4,13 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.serializers.JacksonMapper;
 
 import java.io.IOException;
-import java.net.http.HttpResponse;
 import java.util.Map;
 
 public class PrefectResponse {
     private static final ObjectMapper OBJECT_MAPPER = JacksonMapper.ofJson();
 
-    public static void checkError(HttpResponse<String> response) throws IOException {
+    public static void checkError(java.net.http.HttpResponse<String> response) throws IOException {
         if (response.statusCode() >= 400) {
             String errorMessage = "Prefect API error (HTTP " + response.statusCode() + "): " + response.body();
             try {
@@ -27,12 +26,12 @@ public class PrefectResponse {
         }
     }
 
-    public static <T> T parseResponse(HttpResponse<String> response, Class<T> clazz) throws IOException {
+    public static <T> T parseResponse(java.net.http.HttpResponse<String> response, Class<T> clazz) throws IOException {
         checkError(response);
         return OBJECT_MAPPER.readValue(response.body(), clazz);
     }
 
-    public static Map<String, Object> parseResponseAsMap(HttpResponse<String> response) throws IOException {
+    public static Map<String, Object> parseResponseAsMap(java.net.http.HttpResponse<String> response) throws IOException {
         checkError(response);
         return OBJECT_MAPPER.readValue(response.body(), Map.class);
     }
