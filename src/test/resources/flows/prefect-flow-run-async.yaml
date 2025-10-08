@@ -1,4 +1,4 @@
-id: prefect_flow_run_async_test
+id: prefect_flow_run_async
 namespace: io.kestra.plugin.prefect.cloud
 
 tasks:
