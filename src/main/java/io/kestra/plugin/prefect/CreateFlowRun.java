@@ -1,4 +1,4 @@
-package io.kestra.plugin.prefect.cloud;
+package io.kestra.plugin.prefect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.models.annotations.Example;
@@ -41,7 +41,7 @@ import java.util.Map;
                 
                 tasks:
                   - id: trigger_prefect_run
-                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    type: io.kestra.plugin.prefect.CreateFlowRun
                     apiUrl: "https://api.prefect.cloud/api"
                     accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
                     workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
@@ -59,7 +59,7 @@ import java.util.Map;
                 
                 tasks:
                   - id: trigger_prefect_run
-                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    type: io.kestra.plugin.prefect.CreateFlowRun
                     apiUrl: "https://api.prefect.cloud/api"
                     accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
                     workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
@@ -77,7 +77,7 @@ import java.util.Map;
                 
                 tasks:
                   - id: trigger_prefect_run
-                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    type: io.kestra.plugin.prefect.CreateFlowRun
                     apiUrl: "http://host.docker.internal:4200/api"
                     deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
                     wait: true
@@ -92,7 +92,7 @@ import java.util.Map;
                 
                 tasks:
                   - id: trigger_prefect_run
-                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    type: io.kestra.plugin.prefect.CreateFlowRun
                     apiUrl: "http://host.docker.internal:4200/api"
                     deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
                     apiKey: "{{ secret('PREFECT_BASIC_AUTH') }}"  # base64-encoded "admin:pass"

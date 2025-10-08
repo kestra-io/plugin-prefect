@@ -1,9 +1,9 @@
 id: prefect_flow_run_async
-namespace: io.kestra.plugin.prefect.cloud
+namespace: io.kestra.plugin.prefect
 
 tasks:
   - id: trigger_prefect_deployment_async
-    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+    type: io.kestra.plugin.prefect.CreateFlowRun
     accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
     workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
     deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"

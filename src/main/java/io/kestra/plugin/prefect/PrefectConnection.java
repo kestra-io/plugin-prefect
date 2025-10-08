@@ -1,4 +1,4 @@
-package io.kestra.plugin.prefect.cloud;
+package io.kestra.plugin.prefect;
 
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.models.property.Property;

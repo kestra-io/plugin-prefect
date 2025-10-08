@@ -1,4 +1,4 @@
-package io.kestra.plugin.prefect.cloud;
+package io.kestra.plugin.prefect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kestra.core.serializers.JacksonMapper;
