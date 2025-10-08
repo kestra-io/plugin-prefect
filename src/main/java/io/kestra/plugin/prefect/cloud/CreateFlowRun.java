@@ -100,7 +100,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         description = "Whether to wait for the flow run to complete before continuing. If true, the task will poll the flow run status until it reaches a terminal state (COMPLETED, FAILED, CANCELLED, etc.)."
     )
     @Builder.Default
-    private Property<Boolean> wait = Property.of(true);
+    private Property<Boolean> wait = Property.ofValue(true);
 
     @Schema(
         title = "Poll frequency",
