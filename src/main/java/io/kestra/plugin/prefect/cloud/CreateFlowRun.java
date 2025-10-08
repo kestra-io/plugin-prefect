@@ -53,13 +53,17 @@ import java.util.Map;
         @Example(
             title = "Trigger a Prefect Cloud deployment without waiting",
             code = """
-                id: trigger_prefect_run
-                type: io.kestra.plugin.prefect.cloud.CreateFlowRun
-                accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
-                workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
-                deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
-                apiKey: "{{ secret('PREFECT_API_KEY') }}"
-                wait: false
+                id: prefect_trigger
+                namespace: company.team
+                
+                tasks:
+                  - id: trigger_prefect_run
+                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
+                    workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
+                    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+                    apiKey: "{{ secret('PREFECT_API_KEY') }}"
+                    wait: false
                 """
         )
     }
