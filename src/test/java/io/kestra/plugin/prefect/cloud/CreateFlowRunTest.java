@@ -75,28 +75,5 @@ class CreateFlowRunTest {
         assertThat(connection.getApiKey(), is(notNullValue()));
     }
 
-    /*
-     * Integration test example (commented out by default)
-     * Uncomment and provide valid credentials to test against real Prefect Cloud API
-     *
-    @Test
-    void testCreateFlowRunIntegration() throws Exception {
-        RunContext runContext = runContextFactory.of(Map.of());
-
-        CreateFlowRun task = CreateFlowRun.builder()
-            .accountId(Property.of("your-account-id"))
-            .workspaceId(Property.of("your-workspace-id"))
-            .deploymentId(Property.of("your-deployment-id"))
-            .apiKey(Property.of("your-api-key"))
-            .wait(Property.of(false))
-            .build();
-
-        CreateFlowRun.Output output = task.run(runContext);
-
-        assertThat(output.getFlowRunId(), is(notNullValue()));
-        assertThat(output.getState(), is(notNullValue()));
-        assertThat(output.getFlowRunUrl(), is(notNullValue()));
-    }
-    */
 }
 
