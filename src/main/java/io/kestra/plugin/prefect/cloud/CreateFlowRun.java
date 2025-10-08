@@ -27,8 +27,8 @@ import java.util.Map;
 @Getter
 @NoArgsConstructor
 @Schema(
-    title = "Create a flow run in Prefect Cloud",
-    description = "Trigger a deployment and optionally wait for the flow run to complete."
+    title = "Create a flow run in Prefect",
+    description = "Trigger a Prefect deployment and optionally wait for the flow run to complete. Supports both Prefect Cloud and self-hosted Prefect instances."
 )
 @Plugin(
     examples = {
@@ -42,6 +42,7 @@ import java.util.Map;
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    apiUrl: "https://api.prefect.cloud/api"
                     accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
                     workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
                     deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
@@ -59,11 +60,44 @@ import java.util.Map;
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    apiUrl: "https://api.prefect.cloud/api"
                     accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
                     workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
                     deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
                     apiKey: "{{ secret('PREFECT_API_KEY') }}"
                     wait: false
+                """
+        ),
+        @Example(
+            title = "Trigger a self-hosted Prefect deployment (without authentication)",
+            full = true,
+            code = """
+                id: prefect_self_hosted
+                namespace: company.team
+                
+                tasks:
+                  - id: trigger_prefect_run
+                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    apiUrl: "http://host.docker.internal:4200/api"
+                    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+                    wait: true
+                    pollFrequency: PT10S
+                """
+        ),
+        @Example(
+            title = "Trigger a self-hosted Prefect deployment with Basic authentication",
+            code = """
+                id: prefect_self_hosted_auth
+                namespace: company.team
+                
+                tasks:
+                  - id: trigger_prefect_run
+                    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+                    apiUrl: "http://host.docker.internal:4200/api"
+                    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+                    apiKey: "{{ secret('PREFECT_BASIC_AUTH') }}"  # base64-encoded "admin:pass"
+                    wait: true
+                    pollFrequency: PT10S
                 """
         )
     }
@@ -72,24 +106,33 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     private static final ObjectMapper OBJECT_MAPPER = JacksonMapper.ofJson();
     
     @Schema(
-        title = "Prefect Cloud API key",
-        description = "API key for authenticating with Prefect Cloud. You can create an API key from your Prefect Cloud account settings."
+        title = "Prefect API URL",
+        description = "Base URL for the Prefect API. For Prefect Cloud, use `https://api.prefect.cloud/api`. For self-hosted Prefect, use your server URL, e.g., `http://127.0.0.1:4200/api`."
     )
-    @NotNull
+    @Builder.Default
+    private Property<String> apiUrl = Property.of("https://api.prefect.cloud/api");
+
+    @Schema(
+        title = "Prefect API key / authentication",
+        description = """
+            Authentication credentials for Prefect API. The format depends on your deployment:
+            - **Prefect Cloud**: Use your API key (will be sent as Bearer token)
+            - **Self-hosted with Basic Auth**: Use base64-encoded "admin:pass" (e.g., "YWRtaW46cGFzcw=="). You can also provide the full header value "Basic YWRtaW46cGFzcw=="
+            - **Self-hosted without auth**: Leave empty
+            """
+    )
     private Property<String> apiKey;
 
     @Schema(
         title = "Prefect Cloud account ID",
-        description = "The account ID (UUID) in Prefect Cloud."
+        description = "The account ID (UUID) in Prefect Cloud. Required only for Prefect Cloud deployments."
     )
-    @NotNull
     private Property<String> accountId;
 
     @Schema(
         title = "Prefect Cloud workspace ID",
-        description = "The workspace ID (UUID) in Prefect Cloud."
+        description = "The workspace ID (UUID) in Prefect Cloud. Required only for Prefect Cloud deployments."
     )
-    @NotNull
     private Property<String> workspaceId;
 
     @Schema(
@@ -119,12 +162,6 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     )
     private Map<String, Object> parameters;
 
-    @Schema(
-        title = "Base URL",
-        description = "Base URL for Prefect Cloud API. Defaults to https://api.prefect.cloud/api"
-    )
-    private Property<String> baseUrl;
-
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
@@ -134,7 +171,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             .apiKey(this.apiKey)
             .accountId(this.accountId)
             .workspaceId(this.workspaceId)
-            .baseUrl(this.baseUrl != null ? this.baseUrl : Property.of("https://api.prefect.cloud/api"))
+            .apiUrl(this.apiUrl)
             .build();
 
         String rDeploymentId = runContext.render(deploymentId).as(String.class).orElseThrow();
@@ -152,7 +189,14 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             .POST(HttpRequest.BodyPublishers.ofString(OBJECT_MAPPER.writeValueAsString(requestBody)))
             .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        logger.debug("Sending request to: {}", request.uri());
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            throw new Exception("Failed to connect to Prefect API at " + request.uri() + 
+                              ". Please verify the Prefect server is running and accessible. Error: " + e.getMessage(), e);
+        }
         Map<String, Object> flowRunResponse = PrefectResponse.parseResponseAsMap(response);
 
         String flowRunId = (String) flowRunResponse.get("id");
@@ -181,7 +225,13 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
                 .GET()
                 .build();
 
-            HttpResponse<String> statusResponse = httpClient.send(statusRequest, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> statusResponse;
+            try {
+                statusResponse = httpClient.send(statusRequest, HttpResponse.BodyHandlers.ofString());
+            } catch (Exception e) {
+                throw new Exception("Failed to poll flow run status from Prefect API at " + statusRequest.uri() + 
+                                  ". Please verify the Prefect server is running and accessible. Error: " + e.getMessage(), e);
+            }
             Map<String, Object> flowRunData = PrefectResponse.parseResponseAsMap(statusResponse);
 
             Map<String, Object> state = (Map<String, Object>) flowRunData.get("state");
@@ -212,11 +262,21 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     }
 
     private String getFlowRunUrl(RunContext runContext, PrefectConnection connection, String flowRunId) throws Exception {
-        String rAccountId = runContext.render(connection.getAccountId()).as(String.class).orElseThrow();
-        String rWorkspaceId = runContext.render(connection.getWorkspaceId()).as(String.class).orElseThrow();
-        
-        return String.format("https://app.prefect.cloud/account/%s/workspace/%s/flow-runs/flow-run/%s",
-            rAccountId, rWorkspaceId, flowRunId);
+        if (connection.isCloud()) {
+            // Prefect Cloud URL format
+            String rAccountId = runContext.render(connection.getAccountId()).as(String.class).orElseThrow();
+            String rWorkspaceId = runContext.render(connection.getWorkspaceId()).as(String.class).orElseThrow();
+            
+            return String.format("https://app.prefect.cloud/account/%s/workspace/%s/flow-runs/flow-run/%s",
+                rAccountId, rWorkspaceId, flowRunId);
+        } else {
+            // Self-hosted Prefect URL format
+            // Convert API URL to UI URL (typically same host but different port/path)
+            String rApiUrl = runContext.render(connection.getApiUrl()).as(String.class).orElseThrow();
+            String baseUrl = rApiUrl.replace("/api", "");
+            
+            return String.format("%s/flow-runs/flow-run/%s", baseUrl, flowRunId);
+        }
     }
 
     @Builder
