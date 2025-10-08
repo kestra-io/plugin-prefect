@@ -33,11 +33,57 @@
 <p align="center" style="color:grey;"><i>Get started with Kestra in 4 minutes.</i></p>
 
 
-# Kestra Plugin Template
+# Kestra Prefect Plugin
 
-> A template for creating Kestra plugins
+> Integrate Prefect Cloud workflows with Kestra
 
-This repository serves as a general template for creating a new [Kestra](https://github.com/kestra-io/kestra) plugin. It should take only a few minutes! Use this repository as a scaffold to ensure that you've set up the plugin correctly, including unit tests and CI/CD workflows.
+This plugin provides tasks to interact with Prefect Cloud, allowing you to trigger deployments and manage flow runs from your Kestra workflows.
+
+## Features
+
+- **CreateFlowRun**: Trigger a Prefect Cloud deployment and optionally wait for completion
+- Supports all Prefect Cloud API authentication
+- Configurable polling intervals for flow run status
+- Comprehensive error handling
+
+## Usage
+
+### Trigger a Prefect Flow Run
+
+```yaml
+id: prefect_integration
+namespace: company.team
+
+tasks:
+  - id: trigger_prefect_run
+    type: io.kestra.plugin.prefect.cloud.CreateFlowRun
+    accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
+    workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
+    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+    apiKey: "{{ secret('PREFECT_API_KEY') }}"
+    wait: true
+    pollFrequency: PT10S
+```
+
+### Configuration
+
+The `CreateFlowRun` task supports the following properties:
+
+- `accountId` (required): Your Prefect Cloud account ID (UUID)
+- `workspaceId` (required): Your Prefect Cloud workspace ID (UUID)
+- `deploymentId` (required): The deployment ID to trigger (UUID)
+- `apiKey` (required): Your Prefect Cloud API key
+- `wait` (optional, default: `true`): Wait for the flow run to complete
+- `pollFrequency` (optional, default: `PT5S`): How often to poll for status when waiting
+- `parameters` (optional): Parameters to pass to the flow run
+- `baseUrl` (optional): Custom Prefect Cloud API URL (defaults to https://api.prefect.cloud/api)
+
+### Getting Prefect Cloud Credentials
+
+1. Log in to your Prefect Cloud account
+2. Navigate to your account settings to find your Account ID and Workspace ID
+3. Create an API key from the API Keys section
+4. Find your deployment ID from the Deployments page
 
 ![Kestra orchestrator](https://kestra.io/video.gif)
 

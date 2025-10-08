@@ -1,0 +1,20 @@
+id: prefect_flow_run_async
+namespace: io.kestra.plugin.prefect
+
+tasks:
+  - id: trigger_prefect_deployment_async
+    type: io.kestra.plugin.prefect.CreateFlowRun
+    accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
+    workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
+    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+    apiKey: "{{ secret('PREFECT_API_KEY') }}"
+    wait: false
+
+  - id: log_triggered
+    type: io.kestra.core.tasks.log.Log
+    message: |
+      Prefect flow run triggered (fire-and-forget)!
+      Flow Run ID: {{ outputs.trigger_prefect_deployment_async.flowRunId }}
+      Initial State: {{ outputs.trigger_prefect_deployment_async.state }}
+      Flow Run URL: {{ outputs.trigger_prefect_deployment_async.flowRunUrl }}
+

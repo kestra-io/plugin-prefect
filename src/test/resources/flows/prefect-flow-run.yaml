@@ -1,0 +1,24 @@
+id: prefect_flow_run
+namespace: io.kestra.plugin.prefect
+
+tasks:
+  - id: trigger_prefect_deployment
+    type: io.kestra.plugin.prefect.CreateFlowRun
+    accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
+    workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
+    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+    apiKey: "{{ secret('PREFECT_API_KEY') }}"
+    wait: true
+    pollFrequency: PT5S
+    parameters:
+      test_param: "test_value"
+      timestamp: "{{ now() }}"
+
+  - id: log_result
+    type: io.kestra.core.tasks.log.Log
+    message: |
+      Prefect flow run completed successfully!
+      Flow Run ID: {{ outputs.trigger_prefect_deployment.flowRunId }}
+      Final State: {{ outputs.trigger_prefect_deployment.state }}
+      Flow Run URL: {{ outputs.trigger_prefect_deployment.flowRunUrl }}
+
