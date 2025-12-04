@@ -1,8 +1,8 @@
 group: io.kestra.plugin.prefect
 name: "prefect"
 title: "Prefect"
-description: "This sub-group of plugins contains tasks for interacting with Prefect (both Cloud and self-hosted instances)."
-body: ""
+description: "Tasks that trigger Prefect deployments and monitor flow runs."
+body: "Configure the Prefect API URL with Cloud account/workspace IDs or self-hosted credentials, supply the `deploymentId`, and optionally wait with polling to return run status and IDs for orchestration."
 videos: []
 createdBy: "Kestra Core Team"
 managedBy: "Kestra Core Team"
