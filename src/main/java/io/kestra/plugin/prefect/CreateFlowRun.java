@@ -27,8 +27,8 @@ import java.util.Map;
 @Getter
 @NoArgsConstructor
 @Schema(
-    title = "Create a flow run in Prefect",
-    description = "Trigger a Prefect deployment and optionally wait for the flow run to complete. Supports both Prefect Cloud and self-hosted Prefect instances."
+    title = "Trigger a Prefect deployment run",
+    description = "Creates a flow run from a Prefect deployment and can wait until it reaches a terminal state. Works with Prefect Cloud (account and workspace required) and self-hosted APIs; waits poll every 5 seconds by default and fails on FAILED/CRASHED/CANCELLED when waiting."
 )
 @Plugin(
     examples = {
@@ -99,6 +99,27 @@ import java.util.Map;
                     wait: true
                     pollFrequency: PT10S
                 """
+        ),
+        @Example(
+            title = "Pass parameters to the flow run",
+            code = """
+                id: prefect_with_params
+                namespace: company.team
+                
+                tasks:
+                  - id: trigger_prefect_run
+                    type: io.kestra.plugin.prefect.CreateFlowRun
+                    apiUrl: "https://api.prefect.cloud/api"
+                    accountId: "{{ secret('PREFECT_ACCOUNT_ID') }}"
+                    workspaceId: "{{ secret('PREFECT_WORKSPACE_ID') }}"
+                    deploymentId: "{{ secret('PREFECT_DEPLOYMENT_ID') }}"
+                    apiKey: "{{ secret('PREFECT_API_KEY') }}"
+                    wait: true
+                    parameters:
+                      run_date: "{{ now() }}"
+                      retries: 2
+                      region: "us-east-1"
+                """
         )
     }
 )
@@ -106,59 +127,56 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     private static final ObjectMapper OBJECT_MAPPER = JacksonMapper.ofJson();
     
     @Schema(
-        title = "Prefect API URL",
-        description = "Base URL for the Prefect API. For Prefect Cloud, use `https://api.prefect.cloud/api`. For self-hosted Prefect, use your server URL, e.g., `http://127.0.0.1:4200/api`."
+        title = "Prefect API endpoint",
+        description = "Base Prefect API URL. Defaults to `https://api.prefect.cloud/api`; for self-hosted instances provide your `/api` endpoint such as `http://127.0.0.1:4200/api`."
     )
     @Builder.Default
     private Property<String> apiUrl = Property.of("https://api.prefect.cloud/api");
 
     @Schema(
-        title = "Prefect API key / authentication",
+        title = "API credentials",
         description = """
-            Authentication credentials for Prefect API. The format depends on your deployment:
-            - **Prefect Cloud**: Use your API key (will be sent as Bearer token)
-            - **Self-hosted with Basic Auth**: Use base64-encoded "admin:pass" (e.g., "YWRtaW46cGFzcw=="). You can also provide the full header value "Basic YWRtaW46cGFzcw=="
-            - **Self-hosted without auth**: Leave empty
+            Authentication sent in the Authorization header. Prefect Cloud expects an API key (sent as Bearer); self-hosted can supply a base64 Basic token like "YWRtaW46cGFzcw==" or the full "Basic ..." header; leave empty for unauthenticated servers.
             """
     )
     private Property<String> apiKey;
 
     @Schema(
         title = "Prefect Cloud account ID",
-        description = "The account ID (UUID) in Prefect Cloud. Required only for Prefect Cloud deployments."
+        description = "Prefect Cloud account UUID required when calling the Cloud API."
     )
     private Property<String> accountId;
 
     @Schema(
         title = "Prefect Cloud workspace ID",
-        description = "The workspace ID (UUID) in Prefect Cloud. Required only for Prefect Cloud deployments."
+        description = "Prefect Cloud workspace UUID required when calling the Cloud API."
     )
     private Property<String> workspaceId;
 
     @Schema(
         title = "Deployment ID",
-        description = "The deployment ID (UUID) to create a flow run from."
+        description = "Deployment UUID used to create the flow run."
     )
     @NotNull
     private Property<String> deploymentId;
 
     @Schema(
         title = "Wait for flow run completion",
-        description = "Whether to wait for the flow run to complete before continuing. If true, the task will poll the flow run status until it reaches a terminal state (COMPLETED, FAILED, CANCELLED, etc.)."
+        description = "Whether to block until the flow run reaches a terminal state. Defaults to true; when true, FAILED/CRASHED/CANCELLED throw a task error."
     )
     @Builder.Default
     private Property<Boolean> wait = Property.ofValue(true);
 
     @Schema(
         title = "Poll frequency",
-        description = "How often to poll the flow run status when wait is true."
+        description = "Polling interval while waiting; defaults to PT5S and only used when wait is true."
     )
     @Builder.Default
     private Duration pollFrequency = Duration.ofSeconds(5);
 
     @Schema(
         title = "Flow run parameters",
-        description = "Optional parameters to pass to the flow run."
+        description = "Optional parameters passed to the flow run after rendering with the task context."
     )
     private Map<String, Object> parameters;
 
@@ -284,21 +302,20 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     public static class Output implements io.kestra.core.models.tasks.Output {
         @Schema(
             title = "Flow run ID",
-            description = "The ID of the created flow run"
+            description = "ID of the created flow run"
         )
         private final String flowRunId;
 
         @Schema(
             title = "Flow run state",
-            description = "The final state of the flow run (if wait is true) or the initial state"
+            description = "Terminal state when wait is true; initial state otherwise"
         )
         private final String state;
 
         @Schema(
             title = "Flow run URL",
-            description = "The URL to view the flow run in Prefect Cloud"
+            description = "URL to view the flow run in Prefect UI (Cloud or self-hosted)"
         )
         private final String flowRunUrl;
     }
 }
-
