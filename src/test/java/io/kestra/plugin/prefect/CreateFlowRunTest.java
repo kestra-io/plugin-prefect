@@ -26,11 +26,11 @@ class CreateFlowRunTest {
     void testTaskBuild() {
         // Test that the task can be built with required parameters
         CreateFlowRun task = CreateFlowRun.builder()
-            .accountId(Property.of("test-account-id"))
-            .workspaceId(Property.of("test-workspace-id"))
-            .deploymentId(Property.of("test-deployment-id"))
-            .apiKey(Property.of("test-api-key"))
-            .wait(Property.of(false))
+            .accountId(Property.ofValue("test-account-id"))
+            .workspaceId(Property.ofValue("test-workspace-id"))
+            .deploymentId(Property.ofValue("test-deployment-id"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .wait(Property.ofValue(false))
             .build();
 
         assertThat(task.getAccountId(), is(notNullValue()));
@@ -48,12 +48,12 @@ class CreateFlowRunTest {
         );
 
         CreateFlowRun task = CreateFlowRun.builder()
-            .accountId(Property.of("test-account-id"))
-            .workspaceId(Property.of("test-workspace-id"))
-            .deploymentId(Property.of("test-deployment-id"))
-            .apiKey(Property.of("test-api-key"))
+            .accountId(Property.ofValue("test-account-id"))
+            .workspaceId(Property.ofValue("test-workspace-id"))
+            .deploymentId(Property.ofValue("test-deployment-id"))
+            .apiKey(Property.ofValue("test-api-key"))
             .parameters(params)
-            .wait(Property.of(true))
+            .wait(Property.ofValue(true))
             .build();
 
         assertThat(task.getParameters(), is(notNullValue()));
@@ -65,9 +65,9 @@ class CreateFlowRunTest {
         RunContext runContext = runContextFactory.of(Map.of());
         
         PrefectConnection connection = PrefectConnection.builder()
-            .accountId(Property.of("test-account-id"))
-            .workspaceId(Property.of("test-workspace-id"))
-            .apiKey(Property.of("test-api-key"))
+            .accountId(Property.ofValue("test-account-id"))
+            .workspaceId(Property.ofValue("test-workspace-id"))
+            .apiKey(Property.ofValue("test-api-key"))
             .build();
 
         assertThat(connection.getAccountId(), is(notNullValue()));
