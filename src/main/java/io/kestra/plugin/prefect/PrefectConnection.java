@@ -18,7 +18,7 @@ public class PrefectConnection {
     private static final String PREFECT_CLOUD_API_BASE_URL = "https://api.prefect.cloud/api";
     
     @Builder.Default
-    private Property<String> apiUrl = Property.of(PREFECT_CLOUD_API_BASE_URL);
+    private Property<String> apiUrl = Property.ofValue(PREFECT_CLOUD_API_BASE_URL);
     
     // Optional: only required for Prefect Cloud (not used in self-hosted)
     private Property<String> apiKey;
