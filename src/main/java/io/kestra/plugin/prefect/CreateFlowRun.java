@@ -131,7 +131,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         description = "Base Prefect API URL. Defaults to `https://api.prefect.cloud/api`; for self-hosted instances provide your `/api` endpoint such as `http://127.0.0.1:4200/api`."
     )
     @Builder.Default
-    private Property<String> apiUrl = Property.of("https://api.prefect.cloud/api");
+    private Property<String> apiUrl = Property.ofValue("https://api.prefect.cloud/api");
 
     @Schema(
         title = "API credentials",
