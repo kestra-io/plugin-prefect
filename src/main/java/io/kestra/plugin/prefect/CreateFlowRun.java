@@ -1,6 +1,16 @@
 package io.kestra.plugin.prefect;
 
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.slf4j.Logger;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.property.Property;
@@ -8,18 +18,11 @@ import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.models.tasks.Task;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.JacksonMapper;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.slf4j.Logger;
-
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
 
 @SuperBuilder
 @ToString
@@ -38,7 +41,7 @@ import java.util.Map;
             code = """
                 id: prefect_trigger
                 namespace: company.team
-                
+
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.CreateFlowRun
@@ -56,7 +59,7 @@ import java.util.Map;
             code = """
                 id: prefect_trigger
                 namespace: company.team
-                
+
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.CreateFlowRun
@@ -74,7 +77,7 @@ import java.util.Map;
             code = """
                 id: prefect_self_hosted
                 namespace: company.team
-                
+
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.CreateFlowRun
@@ -89,7 +92,7 @@ import java.util.Map;
             code = """
                 id: prefect_self_hosted_auth
                 namespace: company.team
-                
+
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.CreateFlowRun
@@ -105,7 +108,7 @@ import java.util.Map;
             code = """
                 id: prefect_with_params
                 namespace: company.team
-                
+
                 tasks:
                   - id: trigger_prefect_run
                     type: io.kestra.plugin.prefect.CreateFlowRun
@@ -125,7 +128,7 @@ import java.util.Map;
 )
 public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Output> {
     private static final ObjectMapper OBJECT_MAPPER = JacksonMapper.ofJson();
-    
+
     @Schema(
         title = "Prefect API endpoint",
         description = "Base Prefect API URL. Defaults to `https://api.prefect.cloud/api`; for self-hosted instances provide your `/api` endpoint such as `http://127.0.0.1:4200/api`."
@@ -196,7 +199,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
 
         // Create flow run
         logger.info("Creating flow run for deployment: {}", rDeploymentId);
-        
+
         Map<String, Object> requestBody = new HashMap<>();
         if (parameters != null && !parameters.isEmpty()) {
             requestBody.put("parameters", runContext.render(parameters));
@@ -212,8 +215,11 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
-            throw new Exception("Failed to connect to Prefect API at " + request.uri() + 
-                              ". Please verify the Prefect server is running and accessible. Error: " + e.getMessage(), e);
+            throw new Exception(
+                "Failed to connect to Prefect API at " + request.uri() +
+                    ". Please verify the Prefect server is running and accessible. Error: " + e.getMessage(),
+                e
+            );
         }
         Map<String, Object> flowRunResponse = PrefectResponse.parseResponseAsMap(response);
 
@@ -223,7 +229,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         // Wait for completion if requested
         Boolean shouldWait = runContext.render(wait).as(Boolean.class).orElse(true);
         String finalState = null;
-        
+
         if (shouldWait) {
             logger.info("Waiting for flow run to complete (polling every {})", pollFrequency);
             finalState = waitForCompletion(runContext, connection, httpClient, flowRunId);
@@ -247,8 +253,11 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             try {
                 statusResponse = httpClient.send(statusRequest, HttpResponse.BodyHandlers.ofString());
             } catch (Exception e) {
-                throw new Exception("Failed to poll flow run status from Prefect API at " + statusRequest.uri() + 
-                                  ". Please verify the Prefect server is running and accessible. Error: " + e.getMessage(), e);
+                throw new Exception(
+                    "Failed to poll flow run status from Prefect API at " + statusRequest.uri() +
+                        ". Please verify the Prefect server is running and accessible. Error: " + e.getMessage(),
+                    e
+                );
             }
             Map<String, Object> flowRunData = PrefectResponse.parseResponseAsMap(statusResponse);
 
@@ -260,9 +269,11 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
                 if ("FAILED".equals(stateType) || "CRASHED".equals(stateType) || "CANCELLED".equals(stateType)) {
                     String stateName = (String) state.get("name");
                     String message = (String) state.get("message");
-                    throw new Exception("Flow run ended in state: " + stateType + 
-                                      (stateName != null ? " (" + stateName + ")" : "") +
-                                      (message != null ? " - " + message : ""));
+                    throw new Exception(
+                        "Flow run ended in state: " + stateType +
+                            (stateName != null ? " (" + stateName + ")" : "") +
+                            (message != null ? " - " + message : "")
+                    );
                 }
                 return stateType;
             }
@@ -273,10 +284,10 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
 
     private boolean isTerminalState(String stateType) {
         return stateType.equals("COMPLETED") ||
-               stateType.equals("FAILED") ||
-               stateType.equals("CRASHED") ||
-               stateType.equals("CANCELLED") ||
-               stateType.equals("CANCELLING");
+            stateType.equals("FAILED") ||
+            stateType.equals("CRASHED") ||
+            stateType.equals("CANCELLED") ||
+            stateType.equals("CANCELLING");
     }
 
     private String getFlowRunUrl(RunContext runContext, PrefectConnection connection, String flowRunId) throws Exception {
@@ -284,15 +295,17 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             // Prefect Cloud URL format
             String rAccountId = runContext.render(connection.getAccountId()).as(String.class).orElseThrow();
             String rWorkspaceId = runContext.render(connection.getWorkspaceId()).as(String.class).orElseThrow();
-            
-            return String.format("https://app.prefect.cloud/account/%s/workspace/%s/flow-runs/flow-run/%s",
-                rAccountId, rWorkspaceId, flowRunId);
+
+            return String.format(
+                "https://app.prefect.cloud/account/%s/workspace/%s/flow-runs/flow-run/%s",
+                rAccountId, rWorkspaceId, flowRunId
+            );
         } else {
             // Self-hosted Prefect URL format
             // Convert API URL to UI URL (typically same host but different port/path)
             String rApiUrl = runContext.render(connection.getApiUrl()).as(String.class).orElseThrow();
             String baseUrl = rApiUrl.replace("/api", "");
-            
+
             return String.format("%s/flow-runs/flow-run/%s", baseUrl, flowRunId);
         }
     }

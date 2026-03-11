@@ -1,10 +1,11 @@
 package io.kestra.plugin.prefect;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.kestra.core.serializers.JacksonMapper;
-
 import java.io.IOException;
 import java.util.Map;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.kestra.core.serializers.JacksonMapper;
 
 public class PrefectResponse {
     private static final ObjectMapper OBJECT_MAPPER = JacksonMapper.ofJson();
@@ -36,4 +37,3 @@ public class PrefectResponse {
         return OBJECT_MAPPER.readValue(response.body(), Map.class);
     }
 }
-

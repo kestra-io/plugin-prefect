@@ -1,13 +1,15 @@
 package io.kestra.plugin.prefect;
 
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
-import jakarta.inject.Inject;
-import org.junit.jupiter.api.Test;
 
-import java.util.Map;
+import jakarta.inject.Inject;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -63,7 +65,7 @@ class CreateFlowRunTest {
     @Test
     void testConnectionBuilder() throws Exception {
         RunContext runContext = runContextFactory.of(Map.of());
-        
+
         PrefectConnection connection = PrefectConnection.builder()
             .accountId(Property.ofValue("test-account-id"))
             .workspaceId(Property.ofValue("test-workspace-id"))
@@ -76,4 +78,3 @@ class CreateFlowRunTest {
     }
 
 }
-

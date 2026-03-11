@@ -1,14 +1,14 @@
 package io.kestra.plugin.prefect;
 
-import io.kestra.core.exceptions.IllegalVariableEvaluationException;
-import io.kestra.core.models.property.Property;
-import io.kestra.core.runners.RunContext;
-import jakarta.validation.constraints.NotNull;
-import lombok.*;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+
+import io.kestra.core.exceptions.IllegalVariableEvaluationException;
+import io.kestra.core.models.property.Property;
+import io.kestra.core.runners.RunContext;
+
+import lombok.*;
 
 @Builder
 @Getter
@@ -16,22 +16,22 @@ import java.net.http.HttpRequest;
 @NoArgsConstructor
 public class PrefectConnection {
     private static final String PREFECT_CLOUD_API_BASE_URL = "https://api.prefect.cloud/api";
-    
+
     @Builder.Default
     private Property<String> apiUrl = Property.ofValue(PREFECT_CLOUD_API_BASE_URL);
-    
+
     // Optional: only required for Prefect Cloud (not used in self-hosted)
     private Property<String> apiKey;
-    
+
     // Optional: only required for Prefect Cloud
     private Property<String> accountId;
-    
+
     // Optional: only required for Prefect Cloud
     private Property<String> workspaceId;
 
     public HttpRequest.Builder request(RunContext runContext, String path) throws IllegalVariableEvaluationException {
         String rApiUrl = runContext.render(apiUrl).as(String.class).orElseThrow();
-        
+
         // Build URL - for Prefect Cloud, include account and workspace in path
         // For self-hosted, use the API URL directly
         String url;
@@ -39,20 +39,20 @@ public class PrefectConnection {
             // Prefect Cloud mode
             String rAccountId = runContext.render(accountId).as(String.class).orElseThrow();
             String rWorkspaceId = runContext.render(workspaceId).as(String.class).orElseThrow();
-            url = rApiUrl + 
-                  "/accounts/" + rAccountId + 
-                  "/workspaces/" + rWorkspaceId + 
-                  path;
+            url = rApiUrl +
+                "/accounts/" + rAccountId +
+                "/workspaces/" + rWorkspaceId +
+                path;
         } else {
             // Self-hosted mode
             url = rApiUrl + path;
         }
-        
+
         HttpRequest.Builder builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json");
-        
+
         // Add Authorization header only if API key is provided
         // - Prefect Cloud: Use Bearer token authentication
         // - Self-hosted: Use Basic authentication (base64-encoded "admin:pass")
@@ -74,10 +74,10 @@ public class PrefectConnection {
                 }
             }
         }
-        
+
         return builder;
     }
-    
+
     public boolean isCloud() {
         return accountId != null && workspaceId != null;
     }
@@ -89,4 +89,3 @@ public class PrefectConnection {
             .build();
     }
 }
-
