@@ -23,6 +23,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
+import io.kestra.core.models.annotations.PluginProperty;
 
 @SuperBuilder
 @ToString
@@ -134,6 +135,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         description = "Base Prefect API URL. Defaults to `https://api.prefect.cloud/api`; for self-hosted instances provide your `/api` endpoint such as `http://127.0.0.1:4200/api`."
     )
     @Builder.Default
+    @PluginProperty(group = "connection")
     private Property<String> apiUrl = Property.ofValue("https://api.prefect.cloud/api");
 
     @Schema(
@@ -142,18 +144,21 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             Authentication sent in the Authorization header. Prefect Cloud expects an API key (sent as Bearer); self-hosted can supply a base64 Basic token like "YWRtaW46cGFzcw==" or the full "Basic ..." header; leave empty for unauthenticated servers.
             """
     )
+    @PluginProperty(group = "connection")
     private Property<String> apiKey;
 
     @Schema(
         title = "Prefect Cloud account ID",
         description = "Prefect Cloud account UUID required when calling the Cloud API."
     )
+    @PluginProperty(group = "connection")
     private Property<String> accountId;
 
     @Schema(
         title = "Prefect Cloud workspace ID",
         description = "Prefect Cloud workspace UUID required when calling the Cloud API."
     )
+    @PluginProperty(group = "advanced")
     private Property<String> workspaceId;
 
     @Schema(
@@ -161,6 +166,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         description = "Deployment UUID used to create the flow run."
     )
     @NotNull
+    @PluginProperty(group = "main")
     private Property<String> deploymentId;
 
     @Schema(
@@ -168,6 +174,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         description = "Whether to block until the flow run reaches a terminal state. Defaults to true; when true, FAILED/CRASHED/CANCELLED throw a task error."
     )
     @Builder.Default
+    @PluginProperty(group = "execution")
     private Property<Boolean> wait = Property.ofValue(true);
 
     @Schema(
@@ -175,12 +182,14 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         description = "Polling interval while waiting; defaults to PT5S and only used when wait is true."
     )
     @Builder.Default
+    @PluginProperty(group = "execution")
     private Duration pollFrequency = Duration.ofSeconds(5);
 
     @Schema(
         title = "Flow run parameters",
         description = "Optional parameters passed to the flow run after rendering with the task context."
     )
+    @PluginProperty(group = "main")
     private Map<String, Object> parameters;
 
     @Override
