@@ -11,7 +11,7 @@ tasks:
     wait: false
 
   - id: log_triggered
-    type: io.kestra.core.tasks.log.Log
+    type: io.kestra.plugin.core.log.Log
     message: |
       Prefect flow run triggered (fire-and-forget)!
       Flow Run ID: {{ outputs.trigger_prefect_deployment_async.flowRunId }}
