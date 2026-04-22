@@ -1,14 +1,15 @@
 package io.kestra.plugin.prefect;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
-
+import io.kestra.core.models.annotations.PluginProperty;
+import io.kestra.core.models.annotations.Schema;
 import lombok.*;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 
 @Builder
 @Getter
@@ -20,7 +21,8 @@ public class PrefectConnection {
     @Builder.Default
     private Property<String> apiUrl = Property.ofValue(PREFECT_CLOUD_API_BASE_URL);
 
-    // Optional: only required for Prefect Cloud (not used in self-hosted)
+    @Schema(title = "Prefect API key", description = "Prefect Cloud API key for authentication.")
+    @PluginProperty(secret = true)
     private Property<String> apiKey;
 
     // Optional: only required for Prefect Cloud

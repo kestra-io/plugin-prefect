@@ -144,7 +144,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             Authentication sent in the Authorization header. Prefect Cloud expects an API key (sent as Bearer); self-hosted can supply a base64 Basic token like "YWRtaW46cGFzcw==" or the full "Basic ..." header; leave empty for unauthenticated servers.
             """
     )
-    @PluginProperty(group = "connection")
+    @PluginProperty(group = "connection", secret = true)
     private Property<String> apiKey;
 
     @Schema(
