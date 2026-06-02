@@ -15,7 +15,7 @@ tasks:
       timestamp: "{{ now() }}"
 
   - id: log_result
-    type: io.kestra.core.tasks.log.Log
+    type: io.kestra.plugin.core.log.Log
     message: |
       Prefect flow run completed successfully!
       Flow Run ID: {{ outputs.trigger_prefect_deployment.flowRunId }}
