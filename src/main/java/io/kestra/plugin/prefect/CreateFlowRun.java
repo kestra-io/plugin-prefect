@@ -57,6 +57,7 @@ import io.kestra.core.models.annotations.PluginProperty;
         ),
         @Example(
             title = "Trigger a Prefect Cloud deployment without waiting",
+            full = true,
             code = """
                 id: prefect_trigger
                 namespace: company.team
@@ -90,6 +91,7 @@ import io.kestra.core.models.annotations.PluginProperty;
         ),
         @Example(
             title = "Trigger a self-hosted Prefect deployment with Basic authentication",
+            full = true,
             code = """
                 id: prefect_self_hosted_auth
                 namespace: company.team
@@ -106,6 +108,7 @@ import io.kestra.core.models.annotations.PluginProperty;
         ),
         @Example(
             title = "Pass parameters to the flow run",
+            full = true,
             code = """
                 id: prefect_with_params
                 namespace: company.team
