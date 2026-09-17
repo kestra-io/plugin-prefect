@@ -6,9 +6,14 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.kestra.core.models.annotations.Example;
@@ -32,7 +37,7 @@ import io.kestra.core.models.annotations.PluginProperty;
 @NoArgsConstructor
 @Schema(
     title = "Trigger a Prefect deployment run",
-    description = "Creates a flow run from a Prefect deployment and can wait until it reaches a terminal state. Works with Prefect Cloud (account and workspace required) and self-hosted APIs; waits poll every 5 seconds by default and fails on FAILED/CRASHED/CANCELLED when waiting."
+    description = "Creates a flow run from a Prefect deployment and can wait until it reaches a terminal state. Works with Prefect Cloud (account and workspace required) and self-hosted APIs; waits poll every 5 seconds by default and fails on FAILED/CRASHED/CANCELLED when waiting. Killing the Kestra task, or a worker shutdown, cancels the corresponding Prefect flow run when wait is true."
 )
 @Plugin(
     examples = {
@@ -195,6 +200,143 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     @PluginProperty(group = "main")
     private Map<String, Object> parameters;
 
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicBoolean isCancelled = new AtomicBoolean(false);
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicReference<String> trackedFlowRunId = new AtomicReference<>();
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicReference<PrefectConnection> trackedConnection = new AtomicReference<>();
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicReference<HttpClient> trackedHttpClient = new AtomicReference<>();
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicReference<RunContext> trackedRunContext = new AtomicReference<>();
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicReference<String> lastKnownState = new AtomicReference<>();
+
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final CountDownLatch cancelSignal = new CountDownLatch(1);
+
+    /**
+     * Killing the Kestra task, or a worker shutdown, must cancel the remote Prefect flow run instead of
+     * orphaning it. {@code stop()} must be non-blocking, so the cancel HTTP call is best-effort.
+     */
+    @Override
+    public void kill() {
+        cancelFlowRun();
+    }
+
+    @Override
+    public void stop() {
+        cancelFlowRun();
+    }
+
+    private void cancelFlowRun() {
+        if (!isCancelled.compareAndSet(false, true)) {
+            return;
+        }
+
+        // Unblocks waitForCompletion() immediately instead of leaving it asleep for up to pollFrequency.
+        cancelSignal.countDown();
+        performCancel();
+    }
+
+    /**
+     * Issues the actual Prefect cancel request. Split out from {@link #cancelFlowRun()} so the
+     * kill-before-create race in {@code run()} can trigger it a second time once the flow run ID is
+     * known, without re-entering the once-only {@code isCancelled} guard.
+     */
+    private void performCancel() {
+        String flowRunId = trackedFlowRunId.get();
+        PrefectConnection connection = trackedConnection.get();
+        HttpClient httpClient = trackedHttpClient.get();
+        RunContext runContext = trackedRunContext.get();
+
+        if (flowRunId == null || connection == null || httpClient == null || runContext == null) {
+            return;
+        }
+
+        Logger logger = runContext.logger();
+
+        // Mirrors `prefect flow-run cancel`: once infra is provisioned (RUNNING), ask the worker to tear
+        // it down via CANCELLING; otherwise (SCHEDULED/PENDING/unknown) cancel directly.
+        boolean infrastructureProvisioned = "RUNNING".equals(lastKnownState.get());
+        String targetStateType = infrastructureProvisioned ? "CANCELLING" : "CANCELLED";
+        String targetStateName = infrastructureProvisioned ? "Cancelling" : "Cancelled";
+
+        try {
+            Map<String, Object> state = new HashMap<>();
+            state.put("type", targetStateType);
+            state.put("name", targetStateName);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("state", state);
+            requestBody.put("force", true);
+
+            HttpRequest cancelRequest = connection.request(runContext, "/flow_runs/" + flowRunId + "/set_state")
+                .timeout(Duration.ofSeconds(10))
+                .POST(HttpRequest.BodyPublishers.ofString(OBJECT_MAPPER.writeValueAsString(requestBody)))
+                .build();
+
+            HttpResponse<String> cancelResponse = httpClient.send(cancelRequest, HttpResponse.BodyHandlers.ofString());
+            Map<String, Object> cancelResponseBody = PrefectResponse.parseResponseAsMap(cancelResponse);
+
+            String status = (String) cancelResponseBody.get("status");
+            if (!"ACCEPT".equals(status)) {
+                String reason = extractReason(cancelResponseBody);
+                logger.warn(
+                    "Prefect declined to cancel flow run '{}' (status: {}{}), the flow run may still be running on Prefect",
+                    flowRunId,
+                    status,
+                    reason != null ? ", reason: " + reason : ""
+                );
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to cancel Prefect flow run '{}', the flow run may still be running on Prefect", flowRunId, e);
+        }
+    }
+
+    private static String extractReason(Map<String, Object> cancelResponseBody) {
+        Object details = cancelResponseBody.get("details");
+        if (details instanceof Map<?, ?> detailsMap) {
+            Object reason = detailsMap.get("reason");
+            return reason != null ? reason.toString() : null;
+        }
+        return null;
+    }
+
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
@@ -207,6 +349,11 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             .apiUrl(this.apiUrl)
             .build();
 
+        HttpClient httpClient = PrefectConnection.httpClient();
+        trackedConnection.set(connection);
+        trackedHttpClient.set(httpClient);
+        trackedRunContext.set(runContext);
+
         String rDeploymentId = runContext.render(deploymentId).as(String.class).orElseThrow();
 
         // Create flow run
@@ -217,7 +364,6 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
             requestBody.put("parameters", runContext.render(parameters));
         }
 
-        HttpClient httpClient = PrefectConnection.httpClient();
         HttpRequest request = connection.request(runContext, "/deployments/" + rDeploymentId + "/create_flow_run")
             .POST(HttpRequest.BodyPublishers.ofString(OBJECT_MAPPER.writeValueAsString(requestBody)))
             .build();
@@ -237,6 +383,13 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
 
         String flowRunId = (String) flowRunResponse.get("id");
         logger.info("Created flow run with ID: {}", flowRunId);
+        trackedFlowRunId.set(flowRunId);
+
+        if (isCancelled.get()) {
+            logger.warn("Flow run '{}' was killed while it was being created, cancelling it now", flowRunId);
+            performCancel();
+            throw new Exception("Flow run '" + flowRunId + "' was killed before completion and has been cancelled");
+        }
 
         // Wait for completion if requested
         Boolean shouldWait = runContext.render(wait).as(Boolean.class).orElse(true);
@@ -257,6 +410,10 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
 
     private String waitForCompletion(RunContext runContext, PrefectConnection connection, HttpClient httpClient, String flowRunId) throws Exception {
         while (true) {
+            if (isCancelled.get()) {
+                throw new Exception("Flow run '" + flowRunId + "' polling was stopped because the task was killed or the worker is shutting down");
+            }
+
             HttpRequest statusRequest = connection.request(runContext, "/flow_runs/" + flowRunId)
                 .GET()
                 .build();
@@ -275,6 +432,7 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
 
             Map<String, Object> state = (Map<String, Object>) flowRunData.get("state");
             String stateType = (String) state.get("type");
+            lastKnownState.set(stateType);
 
             // Terminal states in Prefect
             if (isTerminalState(stateType)) {
@@ -290,16 +448,36 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
                 return stateType;
             }
 
-            Thread.sleep(pollFrequency.toMillis());
+            try {
+                cancelSignal.await(pollFrequency.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                throw interruptedFailure(runContext.logger(), flowRunId, e);
+            }
         }
+    }
+
+    /**
+     * Deliberately not a retryable/resumable path: an interrupted thread cannot keep polling. Names the
+     * flow run, which outlives the task unless the kill already cancelled it.
+     */
+    private Exception interruptedFailure(Logger logger, String flowRunId, InterruptedException cause) {
+        Thread.currentThread().interrupt();
+
+        String message = "Interrupted while waiting for Prefect flow run '" + flowRunId + "'"
+            + (isCancelled.get()
+                ? ", the flow run was cancelled."
+                : ". The flow run was not cancelled and may still be running on Prefect.");
+
+        logger.warn(message, cause);
+
+        return new Exception(message, cause);
     }
 
     private boolean isTerminalState(String stateType) {
         return stateType.equals("COMPLETED") ||
             stateType.equals("FAILED") ||
             stateType.equals("CRASHED") ||
-            stateType.equals("CANCELLED") ||
-            stateType.equals("CANCELLING");
+            stateType.equals("CANCELLED");
     }
 
     private String getFlowRunUrl(RunContext runContext, PrefectConnection connection, String flowRunId) throws Exception {
