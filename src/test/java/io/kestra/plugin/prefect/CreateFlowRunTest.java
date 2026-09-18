@@ -110,13 +110,13 @@ class CreateFlowRunTest {
             CreateFlowRun task = flowRunTask(server, Duration.ofSeconds(30));
             RunContext runContext = runContextFactory.of(Map.of());
 
-            CompletableFuture<Exception> runOutcome = runAsync(task, runContext);
+            TaskRun taskRun = runAsync(task, runContext);
 
-            waitUntil(() -> getRunsCounter.get() >= 1, Duration.ofSeconds(5));
+            waitUntilPollLoopObservedState(taskRun.thread());
 
             long start = System.nanoTime();
             task.kill();
-            Exception thrown = runOutcome.get(5, TimeUnit.SECONDS);
+            Exception thrown = taskRun.outcome().get(5, TimeUnit.SECONDS);
             long elapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
 
             assertThat("kill() should interrupt the poll loop instead of waiting out pollFrequency", elapsedMs, lessThan(30_000L));
@@ -156,9 +156,9 @@ class CreateFlowRunTest {
             CreateFlowRun task = flowRunTask(server, Duration.ofSeconds(30));
             RunContext runContext = runContextFactory.of(Map.of());
 
-            CompletableFuture<Exception> runOutcome = runAsync(task, runContext);
+            TaskRun taskRun = runAsync(task, runContext);
 
-            waitUntil(() -> getRunsCounter.get() >= 1, Duration.ofSeconds(5));
+            waitUntilPollLoopObservedState(taskRun.thread());
 
             long start = System.nanoTime();
             task.stop();
@@ -176,7 +176,7 @@ class CreateFlowRunTest {
             assertThat(setStateBodies, hasSize(1));
             assertThat(setStateBodies.get(0), containsString("CANCELLING"));
 
-            Exception thrown = runOutcome.get(5, TimeUnit.SECONDS);
+            Exception thrown = taskRun.outcome().get(5, TimeUnit.SECONDS);
             assertThat(thrown, is(notNullValue()));
         } finally {
             // Let the in-flight (deliberately slow) response finish before tearing down the server, so
@@ -199,16 +199,16 @@ class CreateFlowRunTest {
             CreateFlowRun task = flowRunTask(server, Duration.ofMillis(100));
             RunContext runContext = runContextFactory.of(Map.of());
 
-            CompletableFuture<Exception> runOutcome = runAsync(task, runContext);
+            TaskRun taskRun = runAsync(task, runContext);
 
             // If CANCELLING were (incorrectly) terminal, run() would already have completed successfully
             // after the first poll. Observing several polls with the task still running proves it keeps
             // waiting for a real terminal state instead.
             waitUntil(() -> getRunsCounter.get() >= 3, Duration.ofSeconds(5));
-            assertThat(runOutcome.isDone(), is(false));
+            assertThat(taskRun.outcome().isDone(), is(false));
 
             task.kill();
-            Exception thrown = runOutcome.get(5, TimeUnit.SECONDS);
+            Exception thrown = taskRun.outcome().get(5, TimeUnit.SECONDS);
             assertThat(thrown, is(notNullValue()));
         } finally {
             server.stop(0);
@@ -224,7 +224,10 @@ class CreateFlowRunTest {
             .build();
     }
 
-    private static CompletableFuture<Exception> runAsync(CreateFlowRun task, RunContext runContext) {
+    private record TaskRun(Thread thread, CompletableFuture<Exception> outcome) {
+    }
+
+    private static TaskRun runAsync(CreateFlowRun task, RunContext runContext) {
         CompletableFuture<Exception> outcome = new CompletableFuture<>();
         Thread runnerThread = new Thread(() -> {
             try {
@@ -236,7 +239,18 @@ class CreateFlowRunTest {
         });
         runnerThread.setDaemon(true);
         runnerThread.start();
-        return outcome;
+        return new TaskRun(runnerThread, outcome);
+    }
+
+    /**
+     * Waiting for the stub to merely receive the polling GET request is not enough: that only proves the
+     * server got the request, not that the task's poll loop already parsed the response and recorded the
+     * state. Once it has, the loop moves on to {@code cancelSignal.await(pollFrequency, ...)}, a *timed*
+     * park distinguishable from the untimed park of an in-flight HTTP call, so this is the first point at
+     * which killing/stopping the task is guaranteed to observe the polled state.
+     */
+    private static void waitUntilPollLoopObservedState(Thread runnerThread) throws InterruptedException {
+        waitUntil(() -> runnerThread.getState() == Thread.State.TIMED_WAITING, Duration.ofSeconds(5));
     }
 
     private static HttpServer startStubServer(
