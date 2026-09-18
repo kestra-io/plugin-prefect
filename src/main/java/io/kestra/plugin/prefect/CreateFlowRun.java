@@ -249,6 +249,13 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
     @Builder.Default
     private final CountDownLatch cancelSignal = new CountDownLatch(1);
 
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @Builder.Default
+    private final AtomicBoolean cancelDispatched = new AtomicBoolean(false);
+
     /**
      * Killing the Kestra task, or a worker shutdown, must cancel the remote Prefect flow run instead of
      * orphaning it. {@code stop()} must be non-blocking, so the cancel HTTP call is best-effort.
@@ -290,6 +297,17 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
         RunContext runContext = trackedRunContext.get();
 
         if (flowRunId == null || connection == null || httpClient == null || runContext == null) {
+            // Nothing to cancel yet (e.g. killed before the flow run was created): this call is a no-op,
+            // so it must not latch cancelDispatched, or the real dispatch once the flow run ID is known
+            // (see run()) would be silently skipped.
+            return;
+        }
+
+        // Guards the actual HTTP dispatch itself (not just cancelFlowRun()'s once-only isCancelled
+        // guard): a kill()/stop() landing between trackedFlowRunId.set(...) and the isCancelled.get()
+        // check in run() can otherwise enter performCancel() twice with a flow run ID already known,
+        // sending two real set_state calls to Prefect.
+        if (!cancelDispatched.compareAndSet(false, true)) {
             return;
         }
 
