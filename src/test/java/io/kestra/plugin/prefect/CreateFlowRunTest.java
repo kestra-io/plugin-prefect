@@ -99,7 +99,7 @@ class CreateFlowRunTest {
         String flowRunId = UUID.randomUUID().toString();
         AtomicInteger getRunsCounter = new AtomicInteger();
         List<String> setStateBodies = new CopyOnWriteArrayList<>();
-        HttpServer server = startStubServer(flowRunId, getRunsCounter, setStateBodies, "RUNNING");
+        HttpServer server = startStubServer(flowRunId, getRunsCounter, setStateBodies, "RUNNING", Duration.ZERO);
 
         try {
             CreateFlowRun task = flowRunTask(server, Duration.ofSeconds(30));
@@ -116,6 +116,10 @@ class CreateFlowRunTest {
 
             assertThat("kill() should interrupt the poll loop instead of waiting out pollFrequency", elapsedMs, lessThan(30_000L));
             assertThat(thrown, is(notNullValue()));
+
+            // The cancel HTTP call is dispatched asynchronously, so give it a moment to reach the stub
+            // before asserting on it.
+            waitUntil(() -> !setStateBodies.isEmpty(), Duration.ofSeconds(5));
             assertThat(setStateBodies, hasSize(1));
             assertThat(setStateBodies.get(0), containsString("CANCELLING"));
 
@@ -132,7 +136,10 @@ class CreateFlowRunTest {
         String flowRunId = UUID.randomUUID().toString();
         AtomicInteger getRunsCounter = new AtomicInteger();
         List<String> setStateBodies = new CopyOnWriteArrayList<>();
-        HttpServer server = startStubServer(flowRunId, getRunsCounter, setStateBodies, "RUNNING");
+        // The set_state endpoint deliberately sleeps for several seconds before responding: if stop()
+        // dispatched the cancel request synchronously, it would block for (close to) that same duration.
+        Duration setStateDelay = Duration.ofSeconds(3);
+        HttpServer server = startStubServer(flowRunId, getRunsCounter, setStateBodies, "RUNNING", setStateDelay);
 
         try {
             CreateFlowRun task = flowRunTask(server, Duration.ofSeconds(30));
@@ -146,10 +153,18 @@ class CreateFlowRunTest {
             task.stop();
             long stopElapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
 
-            assertThat("stop() must be non-blocking", stopElapsedMs, lessThan(2_000L));
+            assertThat(
+                "stop() must return well before the slow set_state response, proving the cancel HTTP call is dispatched asynchronously",
+                stopElapsedMs,
+                lessThan(1_000L)
+            );
 
             Exception thrown = runOutcome.get(5, TimeUnit.SECONDS);
             assertThat(thrown, is(notNullValue()));
+
+            // The request body is recorded by the stub as soon as it's received, before the deliberate
+            // sleep, so this is reachable without waiting out the full setStateDelay.
+            waitUntil(() -> !setStateBodies.isEmpty(), setStateDelay.plusSeconds(2));
             assertThat(setStateBodies, hasSize(1));
             assertThat(setStateBodies.get(0), containsString("CANCELLING"));
         } finally {
@@ -162,7 +177,7 @@ class CreateFlowRunTest {
         String flowRunId = UUID.randomUUID().toString();
         AtomicInteger getRunsCounter = new AtomicInteger();
         List<String> setStateBodies = new CopyOnWriteArrayList<>();
-        HttpServer server = startStubServer(flowRunId, getRunsCounter, setStateBodies, "CANCELLING");
+        HttpServer server = startStubServer(flowRunId, getRunsCounter, setStateBodies, "CANCELLING", Duration.ZERO);
 
         try {
             CreateFlowRun task = flowRunTask(server, Duration.ofMillis(100));
@@ -212,7 +227,8 @@ class CreateFlowRunTest {
         String flowRunId,
         AtomicInteger getRunsCounter,
         List<String> setStateBodies,
-        String polledStateType
+        String polledStateType,
+        Duration setStateDelay
     ) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
 
@@ -221,8 +237,17 @@ class CreateFlowRunTest {
 
         server.createContext("/api/flow_runs/" + flowRunId, exchange -> {
             if (exchange.getRequestURI().getPath().endsWith("/set_state")) {
+                // Record the body as soon as it's received, before the artificial delay, so tests can
+                // observe the request was made without waiting out the full delay.
                 String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 setStateBodies.add(body);
+                if (!setStateDelay.isZero()) {
+                    try {
+                        Thread.sleep(setStateDelay.toMillis());
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
                 sendJson(exchange, 200, "{\"status\":\"ACCEPT\",\"state\":{\"type\":\"CANCELLING\",\"name\":\"Cancelling\"}}");
             } else {
                 getRunsCounter.incrementAndGet();

@@ -277,6 +277,11 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
      * Issues the actual Prefect cancel request. Split out from {@link #cancelFlowRun()} so the
      * kill-before-create race in {@code run()} can trigger it a second time once the flow run ID is
      * known, without re-entering the once-only {@code isCancelled} guard.
+     *
+     * <p>The HTTP call is dispatched asynchronously and never awaited on the calling thread: {@code kill()}
+     * and {@code stop()} are invoked from the Kestra worker's lifecycle thread, which the {@code stop()}
+     * contract requires to remain non-blocking. The 10s timeout still bounds the async request itself so it
+     * doesn't hang forever, it just isn't awaited here.
      */
     private void performCancel() {
         String flowRunId = trackedFlowRunId.get();
@@ -310,19 +315,29 @@ public class CreateFlowRun extends Task implements RunnableTask<CreateFlowRun.Ou
                 .POST(HttpRequest.BodyPublishers.ofString(OBJECT_MAPPER.writeValueAsString(requestBody)))
                 .build();
 
-            HttpResponse<String> cancelResponse = httpClient.send(cancelRequest, HttpResponse.BodyHandlers.ofString());
-            Map<String, Object> cancelResponseBody = PrefectResponse.parseResponseAsMap(cancelResponse);
+            httpClient.sendAsync(cancelRequest, HttpResponse.BodyHandlers.ofString())
+                .whenComplete((cancelResponse, throwable) -> {
+                    if (throwable != null) {
+                        logger.warn("Failed to cancel Prefect flow run '{}', the flow run may still be running on Prefect", flowRunId, throwable);
+                        return;
+                    }
 
-            String status = (String) cancelResponseBody.get("status");
-            if (!"ACCEPT".equals(status)) {
-                String reason = extractReason(cancelResponseBody);
-                logger.warn(
-                    "Prefect declined to cancel flow run '{}' (status: {}{}), the flow run may still be running on Prefect",
-                    flowRunId,
-                    status,
-                    reason != null ? ", reason: " + reason : ""
-                );
-            }
+                    try {
+                        Map<String, Object> cancelResponseBody = PrefectResponse.parseResponseAsMap(cancelResponse);
+                        String status = (String) cancelResponseBody.get("status");
+                        if (!"ACCEPT".equals(status)) {
+                            String reason = extractReason(cancelResponseBody);
+                            logger.warn(
+                                "Prefect declined to cancel flow run '{}' (status: {}{}), the flow run may still be running on Prefect",
+                                flowRunId,
+                                status,
+                                reason != null ? ", reason: " + reason : ""
+                            );
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to cancel Prefect flow run '{}', the flow run may still be running on Prefect", flowRunId, e);
+                    }
+                });
         } catch (Exception e) {
             logger.warn("Failed to cancel Prefect flow run '{}', the flow run may still be running on Prefect", flowRunId, e);
         }
